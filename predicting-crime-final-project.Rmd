@@ -1,0 +1,426 @@
+---
+title: "predicting-crime-final-project"
+author: "Jose Cruz"
+date: "12/11/2021"
+output: word_document
+---
+
+# Final Project:
+
+-   In this report there will be 2 parts:
+-   the first part will describe the process through the code and let you see everything step by step with explanation of the process and reasons.
+-   the second part will discuss the final model chosenand how each variable influences the response and why we choosed them and anything else we did.
+
+## The Code
+
+```{r setup, include=FALSE}
+#knitr::opts_chunk$set(echo = TRUE)
+
+
+# load data
+crimeDataset=read.table("Crime.csv",header = T,sep = ',')
+
+
+
+```
+
+```{r}
+# look at our initial dataset
+
+head(crimeDataset)
+
+```
+
+```{r}
+#checks for nulls
+
+is.null(crimeDataset)
+
+```
+
+-   Looked at the data that we have and checked the head of our data set and checked if we had any null values and found none
+
+```{r}
+# names of variables
+names(crimeDataset)
+dim(crimeDataset)
+```
+
+```{r}
+#drop x column from the dataset
+
+crimeDataset=subset(crimeDataset,select = -c(X))
+```
+
+-   Here we looked at the names and dimensions of our data set and found a redundant variable called x and removed it from our data set.
+
+```{r}
+summary(crimeDataset)
+```
+
+-   Here we looked at our variables stats to check for any abnormal metrics. As far as I can see the data look good.
+
+```{r}
+
+#create models
+
+crimeModelOne=lm(crmrte~.,data = crimeDataset)
+
+summary(crimeModelOne)
+
+```
+
+-   Creating our first model with all the predictors included we see a r\^2 of 0.7184 , f stat of 73.85 and p value of 0.7086
+
+```{r}
+# look at chart for normality with qq plots
+
+crimeModelOneResiduals=crimeModelOne$residuals
+crimeModelOneFitted=crimeModelOne$fitted
+
+
+
+
+par(mfrow=c(1,2))
+qqnorm(crimeModelOneResiduals,ylab="residuals")
+qqline(crimeModelOneResiduals)
+
+
+
+plot(crimeModelOneFitted,crimeModelOneResiduals,xlab="Fitted Values",ylab="Residuals",main="Residual Vs Fitted Values")
+abline(h=0)
+
+
+
+
+```
+
+-   creating a normal qq plot and residuals vs fitted values we see that both plots are exhibiting problems with normality and variance
+-   this is further verify when using a shapiro test
+
+```{r}
+# normalty test
+shapiro.test(crimeModelOneResiduals)
+
+
+```
+
+-   Using our shapiro test we see our p value is 2.2 e -16 which indicate a very bad normality that can't reject null hypothesis
+
+```{r}
+#Normality test
+library(lmtest)
+
+bptest(crimeModelOne)
+```
+
+-   Using pagan test our variance is also not in a good place with p value being less that 2.2 e-16 and unable to reject null hypothesis
+
+```{r}
+# Check vif
+
+#install.packages("car")
+library(car)
+vif(crimeModelOne)
+
+
+```
+
+-   A good thing for our first model we see that most of our variables do not have multicolinarity issues
+
+```{r}
+# use forward selection to see which variable to get rid off to reduce model.
+
+#backstep selection
+
+backStepModel= step(crimeModelOne,direction = "backward")
+
+summary(backStepModel)
+
+```
+
+```{r}
+
+# using both steps to see if we get what same model
+
+bothStep=step(crimeModelOne,direction = "both")
+summary(bothStep)
+
+
+```
+
+-   Since we have many variables to start with we are going to start eliminated unnecessary ones using feature selection.
+-   With feature selection we reduced our model from 21 to 11 variables
+
+```{r}
+
+
+bothStepResidual=bothStep$residuals
+bothStepFitted=crimeModelOne$fitted
+
+
+
+
+par(mfrow=c(1,2))
+qqnorm(bothStepResidual,ylab="residuals")
+qqline(bothStepResidual)
+
+
+
+plot(bothStepFitted,bothStepResidual,xlab="Fitted Values",ylab="Residuals",main="Residual Vs Fitted Values")
+abline(h=0)
+
+
+```
+
+-   Even with reducing the count of predictors our results are still the same so now we will find a transformation to help increase our variance and linearity.
+
+```{r}
+# Preform box cox analysis
+library(MASS)
+
+
+bothStepY= crimeDataset$crmrte # this is the y
+
+bothStepX = cbind(1,crimeDataset$year,crimeDataset$prbarr,crimeDataset$prbconv,crimeDataset$polpc,crimeDataset$density,crimeDataset$taxpc,crimeDataset$pctmin,crimeDataset$wfir,crimeDataset$wser,crimeDataset$wfed,crimeDataset$wloc,crimeDataset$pctymle)
+
+
+boxCoxResult=boxcox(bothStepY~bothStepX, lambda= seq(from=-2, to=1, by=0.01))
+maxVariable=boxCoxResult$x[boxCoxResult$y==max(boxCoxResult$y)]
+
+```
+
+-   To find our best transformation I decided to do a box cox with 95 percent certainty.
+-   Preforming our box cox we found a max of 0.41.
+
+```{r}
+# Try a log transformation 
+
+#logCrimeModel=lm((crmrte^(0.41))~.,data = crimeDataset)
+
+
+logCrimeModel2=lm((crmrte^(0.41))~year+prbarr+prbconv+polpc+density+taxpc+pctmin+wfir+wser+wfed+wloc+pctymle,data = crimeDataset)
+
+
+summary(logCrimeModel2)
+
+
+
+#normality and linearity
+logCrimeRes=logCrimeModel2$residuals
+logCrimeFitted=logCrimeModel2$fitted
+
+
+par(mfrow=c(1,2))
+qqnorm(logCrimeRes,ylab="residuals")
+qqline(logCrimeRes)
+
+
+
+plot(logCrimeFitted,logCrimeRes,xlab="Fitted Values",ylab="Residuals",main="Residual Vs Fitted Values")
+abline(h=0)
+
+
+
+# wilk and bausan tests:
+
+
+shapiro.test(logCrimeRes)
+
+
+bptest(logCrimeModel2)
+
+vif(logCrimeModel2)
+
+
+```
+
+-   Applying the transformation of 0.41 to the y in our model increase linearity but variance remains unaffected
+-   All of our variable have no signs of multicollinerity according to our VIF
+
+```{r}
+# looks at residuals vs resdiual graphs
+
+
+par(mfrow=c(2,2))
+
+plot(crimeDataset$year,logCrimeRes,main = "Resdiuals vs years",xlab="years",ylab = "Residuals")
+plot(crimeDataset$prbarr,logCrimeRes,main = "prbarr vs prbarr",xlab="prbarr",ylab = "Residuals")
+plot(crimeDataset$prbconv,logCrimeRes,main = "Resdiuals vs prbconv",xlab="prbconv",ylab = "Residuals")
+plot(crimeDataset$polpc,logCrimeRes,main = "Resdiuals vs polpc",xlab="polpc",ylab = "Residuals")
+plot(crimeDataset$density,logCrimeRes,main = "Resdiuals vs density",xlab="density",ylab = "Residuals")
+plot(crimeDataset$taxpc,logCrimeRes,main = "Resdiuals vs taxpc",xlab="taxpc",ylab = "Residuals")
+plot(crimeDataset$pctmin,logCrimeRes,main = "Resdiuals vs pctmin",xlab="pctmin",ylab = "Residuals")
+plot(crimeDataset$wfir,logCrimeRes,main = "Resdiuals vs wfir",xlab="wfir",ylab = "Residuals")
+plot(crimeDataset$wser,logCrimeRes,main = "Resdiuals vs wser",xlab="wser",ylab = "Residuals")
+plot(crimeDataset$wfed,logCrimeRes,main = "Resdiuals vs wfed",xlab="wfed",ylab = "Residuals")
+plot(crimeDataset$wloc,logCrimeRes,main = "Resdiuals vs wloc",xlab="wloc",ylab = "Residuals")
+plot(crimeDataset$pctymle,logCrimeRes,main = "Resdiuals vs pctymle",xlab="pctymle",ylab = "Residuals")
+
+
+
+
+```
+
+-   To get more insights into our plot I decided to do a residuals vs predictor plot to see if any has signs of variance and linearity
+-   Looking at the year charts it can be left out but will keep due to how high our t value is in our current model with the transformation.
+-   prbconv,prbarr,polpc amd pctymle are at near zero, could apply a log transformation.
+-   The rest a scattered with either spread across the plot or together in a single spot.
+
+```{r}
+# trying more log transformation on your near zeros
+
+logCrimeModel2=lm((crmrte^(0.5))~year+sqrt(prbarr)+sqrt(prbconv)+sqrt(polpc)+log(density)+sqrt(taxpc)+(1/pctmin)+wfir+wser+wfed+wloc+pctymle,data = crimeDataset)
+
+
+summary(logCrimeModel2)
+
+
+
+#normality and linearity
+logCrimeRes=logCrimeModel2$residuals
+logCrimeFitted=logCrimeModel2$fitted
+
+
+par(mfrow=c(1,2))
+qqnorm(logCrimeRes,ylab="residuals")
+qqline(logCrimeRes)
+
+
+
+plot(logCrimeFitted,logCrimeRes,xlab="Fitted Values",ylab="Residuals",main="Residual Vs Fitted Values")
+abline(h=0)
+
+
+```
+
+-   Here we applied some transformations based on our graphs and the results of trial and error.
+-   Looking at our plots we see that some of our results seem to have improved linearity and some variance but not enough yet.
+
+```{r}
+# check for residuals vs leverage  and  residuals vs press:
+
+sig=summary(logCrimeModel2)$sigma
+
+X=cbind(1,crimeDataset$year,crimeDataset$prbarr,crimeDataset$prbconv,crimeDataset$polpc,crimeDataset$density,crimeDataset$taxpc,crimeDataset$pctmin,crimeDataset$wfir,crimeDataset$wser,crimeDataset$wfed,crimeDataset$wloc,crimeDataset$pctymle)
+
+hat=X%*%solve(t(X)%*%X)%*%t(X)
+
+
+p=dim(X)[2]
+n=length(crimeDataset$year)
+
+
+plot(logCrimeRes, diag(hat), xlab='Residuals', ylab='Leverage', main='Residuals Vs Leverage')
+abline(h=2*p/n)
+
+
+sum(diag(hat)>2*p/n)
+
+
+
+#press residuals
+
+press=logCrimeRes/(1-diag(hat))
+plot(logCrimeRes, press, main='Residuals Vs Press')
+
+
+
+
+```
+
+-   Doing our leverage and press graph we see that there are some influential points that are affecting our results.
+-   Getting rid of these could yield better results for our model.
+
+```{r}
+# remove outliers using  cooks distance and r students
+
+#w <- abs(rstudent(bothStep)) < 3 & abs(cooks.distance(bothStep)) < 4/nrow(bothStep$model)
+
+# noInfluenceModel <-update(bothStep, weights=as.numeric(w))
+
+
+
+HighLeverage <- cooks.distance(bothStep) > (4/nrow(crimeDataset))
+LargeResiduals <- rstudent(bothStep) > 3
+hsb2 <- crimeDataset[!HighLeverage & !LargeResiduals,]
+noInfluenceModel <- update(logCrimeModel2,data=hsb2)
+
+```
+
+-   Here we used cooks distance and r student to detect influential points in our data set and updated our model to use the new data set.
+
+```{r}
+# qqline and residuals plots
+
+noInfluenceModelResiduals=noInfluenceModel$residuals
+
+noInfluenceModelFitted=noInfluenceModel$fitted
+
+
+
+par(mfrow=c(1,2))
+qqnorm(logCrimeRes,ylab="residuals")
+qqline(logCrimeRes)
+
+
+
+plot(logCrimeFitted,logCrimeRes,xlab="Fitted Values",ylab="Residuals",main="Residual Vs Fitted Values")
+abline(h=0)
+
+
+
+shapiro.test(noInfluenceModelResiduals)
+
+
+bptest(noInfluenceModel)
+
+vif(noInfluenceModel)
+
+
+summary(noInfluenceModel)
+
+
+
+```
+
+-   Applying our updated data set with no influential points and our model with custom transformation we have achieve a much better normality and variance.
+-   Our variance is still below expectation but much better and where we started.
+-   our normality p value is 0.3828.
+-   our pagan test p value 0.0004256.
+-   There is no signs of issues of multicolinearity using our VIF.
+-   
+
+## Final Model
+
+-   For our final model I decided to go with the function : Y\^0.5=year+sqrt(prbarr)+sqrt(prbconv)+sqrt(polpc)+log(density)+sqrt(taxpc)+(1/pctmin)+wfir+wser+wfed+wloc+pctymle along side our dataset with no influential points.
+
+-   The model included 12 variables each selected through variable selection and feature transformations. Below I will expain the reason for each of their inclement and how they relate to our crime rate:
+
+-   year is included because of how negatively corelated it is to our crime rate, so as crime rate decreases so do the year it was commited.
+
+-   the square root of prbarr probability of arrest is included because of high negative t value meaning with increasing crime rate so does our probality of arrest
+
+-   square root of prbconv (probablity of conviction) is included for its high t value and how it affects crime rate. When crime rate increases so does the chances of convictions
+
+-   square root of polpc number of police per capital is included due to significant t value and how crime rate increases with the influx of police per capital.
+
+-   log of density is include due to it high its t value is and how the increase in population natuarlly increase the amount crime rate increases.
+
+-   square root of taxpc was included with how much it affects crime rate. As taxes per captial increases do does our crime rate.
+
+-   wfir is insignificant to our model but was included due to how it decrease our variance and linearity if removed.
+
+-   wser, wfed, wloc are all wage variables included to make the model better and are signifcant but play a small role in affecting our model is more used to balance out the variance and linearity of our results.
+
+-   pctymle percent young male is insignificant but was choosen mainly due to how big a part it plays in normalizing our model. removing it significantly decreases our variance and linearity.
+
+-   Other parts attempted:
+
+    -   Other things that were attempted was trying another back step selection but results proved to be negiable and our r\^2 decreased as a results.
+    -   Removing other insignificant variables proved to decreased our variance and linearity along side our r\^2
+    -   Applying other transformation to our varibles proved to impove our model only minisule and affected the results of our r\^2 and variance to be lower than before being apply.
+
+# Final words
+
+-   The current final model selected presents a model that has good normality with low variance, but this is the best that could be achieved with my current knowledge of the tools and system. It has a r\^2 of 0.7476, with F-statistic: 155.7 and p value \< 2.2e-16. A possible transformation could be using ridge regression to increase the variance in exchange for more bias in the model. This concludes the result of my project in trying to solve a model that calculates the crime rate using the given data, thank you.
